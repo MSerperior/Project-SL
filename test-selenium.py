@@ -5,6 +5,8 @@ import time
 import random
 from bs4 import BeautifulSoup
 import json
+from datetime import date, timedelta
+
 
 def wasteTime(timeToWait):
     time.sleep(timeToWait+random.random()*3)
@@ -13,10 +15,11 @@ def wasteTime(timeToWait):
 def wasteTimeClick(timeToWait):
     time.sleep(random.random()*timeToWait)
 
-# driver = webdriver.Firefox()
 
-# driver.get("https://www.indopremier.com/ipotnews/newsSmartSearch.php?code=BBCA")
-# wasteTime(3)
+driver = webdriver.Firefox()
+
+driver.get("https://www.indopremier.com/ipotnews/newsSmartSearch.php?code=BBCA")
+wasteTime(3)
 
 
 def input_date(date):
@@ -46,21 +49,13 @@ def input_date(date):
     submitBtn = driver.find_element(By.XPATH, '//button[text()="GO"]')
     submitBtn.click()
 
+    return driver.page_source
+
 # input_date('10/10/2022')
 # html = driver.page_source
 # file = open("test.html", "w")
 # file.write(html)
 
-data = dict()
-
-data['10/10/2022'] = {
-    'Top Buyer': {},
-    'Top Seller': {},
-    'T. Val': 0,
-    'F. NVal': 0,
-    'T. Lot': 0,
-    'Avg': 0,
-}
 
 def read_html():
     file = open("test.html", "r")
@@ -68,7 +63,17 @@ def read_html():
     return html
 
 
-def get_data(html):
+def get_data(html, date):
+    data = dict()
+
+    data[date] = {
+        'Top Buyer': {},
+        'Top Seller': {},
+        'T. Val': 0,
+        'F. NVal': 0,
+        'T. Lot': 0,
+        'Avg': 0,
+    }
     soup = BeautifulSoup(html, 'html.parser')
     table = soup.find(
         'table', attrs={'class': 'table table-summary table-hover noborder nm'})
@@ -94,9 +99,8 @@ def get_data(html):
         seller["S.Val"] = money_to_int(cols[7])
         seller["S.Avg"] = money_to_int(cols[8])
 
-
-        data["10/10/2022"]["Top Buyer"].setdefault(int(cols[4]), buyer)
-        data["10/10/2022"]["Top Seller"].setdefault(int(cols[4]), seller)
+        data[date]["Top Buyer"].setdefault(int(cols[4]), buyer)
+        data[date]["Top Seller"].setdefault(int(cols[4]), seller)
         # print(cols)
 
     tfoot = table.find('tfoot')
@@ -104,19 +108,37 @@ def get_data(html):
     foot_rows = [ele.text.strip() for ele in foot_rows]
     # print(foot_rows)
 
-    data["10/10/2022"]["T. Val"] = money_to_int(foot_rows[0].split(' : ')[-1])
-    data["10/10/2022"]["F. NVal"] = money_to_int(foot_rows[1].split(' : ')[-1])
-    data["10/10/2022"]["T. Lot"] = money_to_int(foot_rows[2].split(' : ')[-1])
-    data["10/10/2022"]["Avg"] = money_to_int(foot_rows[3].split(' : ')[-1])
-    print(json.dumps(data, indent=2))
+    data[date]["T. Val"] = money_to_int(foot_rows[0].split(' : ')[-1])
+    data[date]["F. NVal"] = money_to_int(foot_rows[1].split(' : ')[-1])
+    data[date]["T. Lot"] = money_to_int(foot_rows[2].split(' : ')[-1])
+    data[date]["Avg"] = money_to_int(foot_rows[3].split(' : ')[-1])
+    # print(json.dumps(data, indent=2))
+    return data
 # print(float("35,661".replace(',', '')))
 
+
 def money_to_int(money):
-    if(money[-1] == 'M'):
+    if (money[-1] == 'M'):
         return int(float(money[:-1].replace(',', ''))*1000000)
-    elif(money[-1] == 'B'):
+    elif (money[-1] == 'B'):
         return int(float(money[:-1].replace(',', ''))*1000000000)
+    elif(money[-1] == 'T'):
+        return int(float(money[:-1].replace(',', ''))*1000000000000)
     return int(money.replace(',', ''))
-    
-get_data(read_html())
+
+for i in range(1, 10):
+    day = date.today() - timedelta(days=i)
+    if (day.weekday() == 5 or day.weekday() == 6):
+        continue
+    html = input_date(day.strftime("%m/%d/%Y"))
+    broker_summary = get_data(html, day.strftime("%m/%d/%Y"))
+    print(json.dumps(broker_summary, indent=2))
+
+
+# get_data(read_html())
 # print(money_to_int("96.5 M"))
+# print(date(2022, 10, 31).strftime("%m/%d/%Y"))
+# today = date.today()
+# yesterday = today - timedelta(days=1)
+# print(today.strftime("%m/%d/%Y"))
+# print(yesterday.strftime("%m/%d/%Y"))
