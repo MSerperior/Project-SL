@@ -5,8 +5,8 @@ import time
 import random
 from bs4 import BeautifulSoup
 import json
-from datetime import date, timedelta
-
+import pymongo as pm
+from datetime import datetime, timedelta
 
 def wasteTime(timeToWait):
     time.sleep(timeToWait+random.random()*3)
@@ -14,6 +14,16 @@ def wasteTime(timeToWait):
 
 def wasteTimeClick(timeToWait):
     time.sleep(random.random()*timeToWait)
+
+
+# Connect to the MongoDB server
+client = pm.MongoClient('localhost', 27017)
+
+# Connect to the database
+db = client['Project_SL']
+
+# Connect to the collection
+coll = db['broker_summary']
 
 
 driver = webdriver.Firefox()
@@ -63,16 +73,15 @@ def read_html():
     return html
 
 
-def get_data(html, date):
-    data = dict()
-
-    data[date] = {
+def get_data(html, day):
+    data = {
         'Top Buyer': {},
         'Top Seller': {},
         'T. Val': 0,
         'F. NVal': 0,
         'T. Lot': 0,
         'Avg': 0,
+        'Date': day
     }
     soup = BeautifulSoup(html, 'html.parser')
     table = soup.find(
@@ -99,8 +108,8 @@ def get_data(html, date):
         seller["S.Val"] = money_to_int(cols[7])
         seller["S.Avg"] = money_to_int(cols[8])
 
-        data[date]["Top Buyer"].setdefault(int(cols[4]), buyer)
-        data[date]["Top Seller"].setdefault(int(cols[4]), seller)
+        data["Top Buyer"].setdefault(str(cols[4]), buyer)
+        data["Top Seller"].setdefault(str(cols[4]), seller)
         # print(cols)
 
     tfoot = table.find('tfoot')
@@ -108,17 +117,18 @@ def get_data(html, date):
     foot_rows = [ele.text.strip() for ele in foot_rows]
     # print(foot_rows)
 
-    data[date]["T. Val"] = money_to_int(foot_rows[0].split(' : ')[-1])
-    data[date]["F. NVal"] = money_to_int(foot_rows[1].split(' : ')[-1])
-    data[date]["T. Lot"] = money_to_int(foot_rows[2].split(' : ')[-1])
-    data[date]["Avg"] = money_to_int(foot_rows[3].split(' : ')[-1])
+    data["T. Val"] = money_to_int(foot_rows[0].split(' : ')[-1])
+    data["F. NVal"] = money_to_int(foot_rows[1].split(' : ')[-1])
+    data["T. Lot"] = money_to_int(foot_rows[2].split(' : ')[-1])
+    data["Avg"] = money_to_int(foot_rows[3].split(' : ')[-1])
     # print(json.dumps(data, indent=2))
     return data
-# print(float("35,661".replace(',', '')))
 
 
 def money_to_int(money):
-    if (money[-1] == 'M'):
+    if (money[-1] == 'K'):
+        return int(float(money[:-1].replace(',', ''))*1000)
+    elif (money[-1] == 'M'):
         return int(float(money[:-1].replace(',', ''))*1000000)
     elif (money[-1] == 'B'):
         return int(float(money[:-1].replace(',', ''))*1000000000)
@@ -126,13 +136,28 @@ def money_to_int(money):
         return int(float(money[:-1].replace(',', ''))*1000000000000)
     return int(money.replace(',', ''))
 
-for i in range(1, 10):
-    day = date.today() - timedelta(days=i)
-    if (day.weekday() == 5 or day.weekday() == 6):
+data = []
+for i in range(1, 35):
+    try :
+        day = datetime.today()
+        day = day.replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=i)
+
+        if (day.weekday() == 5 or day.weekday() == 6):
+            continue
+        query = {"Date": day}
+        if (coll.find_one(query) != None):
+            continue
+        html = input_date(day.strftime("%m/%d/%Y"))
+        data.append(get_data(html, day))
+    except:
+        print("Failed to get data on :" + day.strftime("%m/%d/%Y"))
         continue
-    html = input_date(day.strftime("%m/%d/%Y"))
-    broker_summary = get_data(html, day.strftime("%m/%d/%Y"))
-    print(json.dumps(broker_summary, indent=2))
+
+try :
+    coll.insert_many(data)
+except:
+    print("Failed to insert data")
+client.close()
 
 
 # get_data(read_html())
